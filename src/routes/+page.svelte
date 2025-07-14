@@ -3,22 +3,8 @@
   let isProcessing = false;
   let textPrompt = '';
 
-  // Sample base image with circular edit area
-  const sampleImage = 'data:image/svg+xml;base64,' + btoa(`
-    <svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <pattern id="checkerboard" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-          <rect x="0" y="0" width="20" height="20" fill="#f0f0f0"/>
-          <rect x="20" y="20" width="20" height="20" fill="#f0f0f0"/>
-          <rect x="0" y="20" width="20" height="20" fill="#e0e0e0"/>
-          <rect x="20" y="0" width="20" height="20" fill="#e0e0e0"/>
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#checkerboard)"/>
-      <circle cx="200" cy="200" r="80" fill="rgba(255,107,107,0.1)" stroke="#ff6b6b" stroke-width="3" stroke-dasharray="8,4"/>
-      <text x="200" y="205" text-anchor="middle" font-family="Arial" font-size="14" fill="#666">Edit Area</text>
-    </svg>
-  `);
+  // Sample image from static folder
+  const sampleImageUrl = '/photo-1579353977828-2a4eab540b9a.jpeg';
 
   function processImage() {
     if (!textPrompt.trim()) return;
@@ -28,7 +14,7 @@
     // TODO: Replace with actual Hugging Face API call
     setTimeout(() => {
       // Placeholder: For now, just show a sample processed image
-      processedImage = sampleImage;
+      processedImage = sampleImageUrl;
       isProcessing = false;
     }, 3000);
   }
@@ -56,7 +42,12 @@
     <div class="image-panel">
       <h2>Original Image</h2>
       <div class="image-wrapper">
-        <img src={sampleImage} alt="Sample image with edit area" />
+        <div class="image-container-with-mask">
+          <img src={sampleImageUrl} alt="Sample image with edit area" class="sample-image" />
+          <div class="edit-mask">
+            <div class="edit-circle"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -100,6 +91,27 @@
 </main>
 
 <style>
+  :global(body) {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    margin: 0;
+  }
+
+  :global(body::before) {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+      radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(120, 119, 198, 0.2) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
   main {
     max-width: 1200px;
     margin: 0 auto;
@@ -108,16 +120,29 @@
       system-ui,
       -apple-system,
       sans-serif;
+    position: relative;
+    z-index: 1;
   }
 
   header {
     text-align: center;
     margin-bottom: 2rem;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   h1 {
-    color: #333;
+    color: white;
     margin-bottom: 0.5rem;
+    font-size: 2.5rem;
+    font-weight: 300;
+    letter-spacing: 1px;
+  }
+
+  header p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.1rem;
+    font-weight: 300;
   }
 
   .image-container {
@@ -128,10 +153,12 @@
   }
 
   .image-panel {
-    border: 2px solid #ddd;
-    border-radius: 8px;
-    padding: 1rem;
-    background: #f9f9f9;
+    border: none;
+    border-radius: 16px;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   }
 
   .image-panel h2 {
@@ -145,9 +172,55 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px dashed #ccc;
-    border-radius: 4px;
-    background: white;
+    border: 2px dashed rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.5);
+    overflow: hidden;
+  }
+
+  .image-container-with-mask {
+    position: relative;
+    display: inline-block;
+  }
+
+  .sample-image {
+    max-width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+
+  .edit-mask {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .edit-circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 120px;
+    height: 120px;
+    transform: translate(-50%, -50%);
+    border: 3px dashed #ff6b6b;
+    border-radius: 50%;
+    background: rgba(255, 107, 107, 0.1);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.6;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.05);
+    }
   }
 
   .image-wrapper img {
@@ -194,11 +267,12 @@
   }
 
   .prompt-input {
-    border: 2px solid #ddd;
-    border-radius: 12px;
-    padding: 1rem;
-    background: white;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: none;
+    border-radius: 16px;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   }
 
   .prompt-input textarea {
