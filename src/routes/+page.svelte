@@ -1,39 +1,47 @@
 <script>
-  let originalImage = null;
   let processedImage = null;
   let isProcessing = false;
-  let fileInput;
+  let textPrompt = '';
 
-  function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        originalImage = e.target.result;
-        processedImage = null;
-      };
-      reader.readAsDataURL(file);
-    }
-  }
+  // Sample base image with circular edit area
+  const sampleImage = 'data:image/svg+xml;base64,' + btoa(`
+    <svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="checkerboard" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+          <rect x="0" y="0" width="20" height="20" fill="#f0f0f0"/>
+          <rect x="20" y="20" width="20" height="20" fill="#f0f0f0"/>
+          <rect x="0" y="20" width="20" height="20" fill="#e0e0e0"/>
+          <rect x="20" y="0" width="20" height="20" fill="#e0e0e0"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#checkerboard)"/>
+      <circle cx="200" cy="200" r="80" fill="rgba(255,107,107,0.1)" stroke="#ff6b6b" stroke-width="3" stroke-dasharray="8,4"/>
+      <text x="200" y="205" text-anchor="middle" font-family="Arial" font-size="14" fill="#666">Edit Area</text>
+    </svg>
+  `);
 
   function processImage() {
-    if (!originalImage) return;
-
+    if (!textPrompt.trim()) return;
+    
     isProcessing = true;
-
-    // Simulate model processing with a delay
+    
+    // TODO: Replace with actual Hugging Face API call
     setTimeout(() => {
-      // For now, just copy the original image as a placeholder
-      processedImage = originalImage;
+      // Placeholder: For now, just show a sample processed image
+      processedImage = sampleImage;
       isProcessing = false;
-    }, 2000);
+    }, 3000);
   }
 
-  function clearImages() {
-    originalImage = null;
+  function clearResult() {
     processedImage = null;
-    if (fileInput) {
-      fileInput.value = '';
+    textPrompt = '';
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      processImage();
     }
   }
 </script>
@@ -41,34 +49,14 @@
 <main>
   <header>
     <h1>bridgeDiffusion Model Tester</h1>
-    <p>Upload an image to test the diffusion model</p>
+    <p>Enter a text prompt to edit the circular area of the image</p>
   </header>
-
-  <div class="controls">
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept="image/*"
-      on:change={handleFileSelect}
-      class="file-input"
-    />
-    <button on:click={processImage} disabled={!originalImage || isProcessing} class="process-btn">
-      {isProcessing ? 'Processing...' : 'Process Image'}
-    </button>
-    <button on:click={clearImages} disabled={!originalImage} class="clear-btn"> Clear </button>
-  </div>
 
   <div class="image-container">
     <div class="image-panel">
       <h2>Original Image</h2>
       <div class="image-wrapper">
-        {#if originalImage}
-          <img src={originalImage} alt="Original" />
-        {:else}
-          <div class="placeholder">
-            <p>Select an image to upload</p>
-          </div>
-        {/if}
+        <img src={sampleImage} alt="Sample image with edit area" />
       </div>
     </div>
 
@@ -78,7 +66,7 @@
         {#if isProcessing}
           <div class="loading">
             <div class="spinner"></div>
-            <p>Processing image...</p>
+            <p>Processing with bridge diffusion...</p>
           </div>
         {:else if processedImage}
           <img src={processedImage} alt="Processed" />
@@ -87,6 +75,25 @@
             <p>Processed image will appear here</p>
           </div>
         {/if}
+      </div>
+    </div>
+  </div>
+
+  <div class="input-container">
+    <div class="prompt-input">
+      <textarea
+        bind:value={textPrompt}
+        on:keydown={handleKeyDown}
+        placeholder="Enter your prompt to edit the circular area... (Press Enter to generate)"
+        rows="3"
+      ></textarea>
+      <div class="input-actions">
+        <button on:click={processImage} disabled={!textPrompt.trim() || isProcessing} class="generate-btn">
+          {isProcessing ? 'Generating...' : 'Generate'}
+        </button>
+        <button on:click={clearResult} disabled={!processedImage && !textPrompt} class="clear-btn">
+          Clear
+        </button>
       </div>
     </div>
   </div>
@@ -113,64 +120,11 @@
     margin-bottom: 0.5rem;
   }
 
-  .controls {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-  }
-
-  .file-input {
-    padding: 0.5rem;
-    border: 2px solid #ddd;
-    border-radius: 4px;
-    background: white;
-  }
-
-  .process-btn,
-  .clear-btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-
-  .process-btn {
-    background: #007bff;
-    color: white;
-  }
-
-  .process-btn:hover:not(:disabled) {
-    background: #0056b3;
-  }
-
-  .process-btn:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-  }
-
-  .clear-btn {
-    background: #dc3545;
-    color: white;
-  }
-
-  .clear-btn:hover:not(:disabled) {
-    background: #c82333;
-  }
-
-  .clear-btn:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-  }
-
   .image-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
-    margin-top: 2rem;
+    margin-bottom: 2rem;
   }
 
   .image-panel {
@@ -234,19 +188,107 @@
     }
   }
 
+  .input-container {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .prompt-input {
+    border: 2px solid #ddd;
+    border-radius: 12px;
+    padding: 1rem;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .prompt-input textarea {
+    width: 100%;
+    border: none;
+    outline: none;
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1.5;
+    background: transparent;
+  }
+
+  .prompt-input textarea::placeholder {
+    color: #999;
+  }
+
+  .input-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #eee;
+  }
+
+  .generate-btn,
+  .clear-btn {
+    padding: 0.5rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+  }
+
+  .generate-btn {
+    background: #007bff;
+    color: white;
+  }
+
+  .generate-btn:hover:not(:disabled) {
+    background: #0056b3;
+    transform: translateY(-1px);
+  }
+
+  .generate-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .clear-btn {
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 1px solid #ddd;
+  }
+
+  .clear-btn:hover:not(:disabled) {
+    background: #e9ecef;
+    color: #495057;
+  }
+
+  .clear-btn:disabled {
+    background: #f8f9fa;
+    color: #ccc;
+    cursor: not-allowed;
+  }
+
   @media (max-width: 768px) {
     .image-container {
       grid-template-columns: 1fr;
       gap: 1rem;
     }
 
-    .controls {
-      flex-direction: column;
-      align-items: center;
-    }
-
     main {
       padding: 1rem;
+    }
+
+    .input-actions {
+      flex-direction: column;
+      gap: 0.5rem;
+      align-items: stretch;
+    }
+
+    .generate-btn,
+    .clear-btn {
+      width: 100%;
     }
   }
 </style>
