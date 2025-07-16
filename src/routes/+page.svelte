@@ -1,22 +1,52 @@
 <script>
+  import { processImageWithFluxBase64, imageUrlToBase64 } from '$lib/huggingface.js';
+
   let processedImage = null;
   let isProcessing = false;
   let textPrompt = '';
+  let errorMessage = '';
+  let apiKey = '';
 
   // Sample image from static folder
   const sampleImageUrl = '/photo-1579353977828-2a4eab540b9a.jpeg';
 
-  function processImage() {
+  // Load API key from environment or local storage
+  $: {
+    if (typeof window !== 'undefined') {
+      apiKey = import.meta.env.VITE_HUGGINGFACE_API_KEY || localStorage.getItem('hf_api_key') || '';
+    }
+  }
+
+  async function processImage() {
     if (!textPrompt.trim()) return;
-    
+    if (!apiKey.trim()) {
+      errorMessage = 'Please enter your Hugging Face API key';
+      return;
+    }
+
     isProcessing = true;
-    
-    // TODO: Replace with actual Hugging Face API call
-    setTimeout(() => {
-      // Placeholder: For now, just show a sample processed image
-      processedImage = sampleImageUrl;
+    errorMessage = '';
+
+    try {
+      // Convert sample image to base64
+      const imageBase64 = await imageUrlToBase64(sampleImageUrl);
+
+      // Call FLUX.1-Kontext-dev API
+      const resultImageUrl = await processImageWithFluxBase64(imageBase64, textPrompt, apiKey);
+
+      processedImage = resultImageUrl;
+    } catch (error) {
+      console.error('Error processing image:', error);
+      errorMessage = `Failed to process image: ${error.message}`;
+    } finally {
       isProcessing = false;
-    }, 3000);
+    }
+  }
+
+  function saveApiKey() {
+    if (typeof window !== 'undefined' && apiKey.trim()) {
+      localStorage.setItem('hf_api_key', apiKey.trim());
+    }
   }
 
   function clearResult() {
@@ -34,8 +64,8 @@
 
 <main>
   <header>
-    <h1>bridgeDiffusion Model Tester</h1>
-    <p>Enter a text prompt to edit the circular area of the image</p>
+    <h1>Image Inpainting Demo</h1>
+    <p>Enter a text prompt to edit the circular area of the image (Free using Stable Diffusion)</p>
   </header>
 
   <div class="image-container">
@@ -71,6 +101,23 @@
   </div>
 
   <div class="input-container">
+    <!-- API Key Input -->
+    <div class="api-key-input">
+      <input
+        type="password"
+        bind:value={apiKey}
+        on:blur={saveApiKey}
+        placeholder="Enter your Hugging Face API key..."
+        class="api-input"
+      />
+      <p class="api-help">
+        Get your <strong>FREE</strong> API key from <a href="https://huggingface.co/settings/tokens" target="_blank"
+          >Hugging Face Settings</a
+        > (Sign up → Settings → Access Tokens)
+      </p>
+    </div>
+
+    <!-- Prompt Input -->
     <div class="prompt-input">
       <textarea
         bind:value={textPrompt}
@@ -78,8 +125,19 @@
         placeholder="Enter your prompt to edit the circular area... (Press Enter to generate)"
         rows="3"
       ></textarea>
+
+      {#if errorMessage}
+        <div class="error-message">
+          {errorMessage}
+        </div>
+      {/if}
+
       <div class="input-actions">
-        <button on:click={processImage} disabled={!textPrompt.trim() || isProcessing} class="generate-btn">
+        <button
+          on:click={processImage}
+          disabled={!textPrompt.trim() || !apiKey.trim() || isProcessing}
+          class="generate-btn"
+        >
           {isProcessing ? 'Generating...' : 'Generate'}
         </button>
         <button on:click={clearResult} disabled={!processedImage && !textPrompt} class="clear-btn">
@@ -104,7 +162,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: 
+    background:
       radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
       radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
       radial-gradient(circle at 40% 40%, rgba(120, 119, 198, 0.2) 0%, transparent 50%);
@@ -213,7 +271,8 @@
   }
 
   @keyframes pulse {
-    0%, 100% {
+    0%,
+    100% {
       opacity: 0.6;
       transform: translate(-50%, -50%) scale(1);
     }
@@ -264,6 +323,58 @@
   .input-container {
     max-width: 800px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .api-key-input {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  }
+
+  .api-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, 0.8);
+    margin-bottom: 0.5rem;
+  }
+
+  .api-input:focus {
+    outline: none;
+    border-color: #007bff;
+    background: white;
+  }
+
+  .api-help {
+    margin: 0;
+    font-size: 12px;
+    color: #666;
+  }
+
+  .api-help a {
+    color: #007bff;
+    text-decoration: none;
+  }
+
+  .api-help a:hover {
+    text-decoration: underline;
+  }
+
+  .error-message {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-top: 0.5rem;
+    border: 1px solid rgba(220, 53, 69, 0.2);
+    font-size: 14px;
   }
 
   .prompt-input {
