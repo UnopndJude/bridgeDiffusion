@@ -5,24 +5,20 @@
   let isProcessing = false;
   let textPrompt = '';
   let errorMessage = '';
-  let apiKey = '';
+  let replicateApiKey = '';
 
   // Sample image from static folder
   const sampleImageUrl = '/photo-1579353977828-2a4eab540b9a.jpeg';
 
-  // Load API key from environment or local storage
+  // Load API key from localStorage
   $: {
     if (typeof window !== 'undefined') {
-      apiKey = import.meta.env.VITE_HUGGINGFACE_API_KEY || localStorage.getItem('hf_api_key') || '';
+      replicateApiKey = localStorage.getItem('replicate_api_key') || '';
     }
   }
 
   async function processImage() {
     if (!textPrompt.trim()) return;
-    if (!apiKey.trim()) {
-      errorMessage = 'Please enter your Hugging Face API key';
-      return;
-    }
 
     isProcessing = true;
     errorMessage = '';
@@ -31,8 +27,8 @@
       // Convert sample image to base64
       const imageBase64 = await imageUrlToBase64(sampleImageUrl);
 
-      // Call FLUX.1-Kontext-dev API
-      const resultImageUrl = await processImageWithFluxBase64(imageBase64, textPrompt, apiKey);
+      // Call FLUX.1-Kontext-dev via Replicate API
+      const resultImageUrl = await processImageWithFluxBase64(imageBase64, textPrompt, replicateApiKey);
 
       processedImage = resultImageUrl;
     } catch (error) {
@@ -40,12 +36,6 @@
       errorMessage = `Failed to process image: ${error.message}`;
     } finally {
       isProcessing = false;
-    }
-  }
-
-  function saveApiKey() {
-    if (typeof window !== 'undefined' && apiKey.trim()) {
-      localStorage.setItem('hf_api_key', apiKey.trim());
     }
   }
 
@@ -60,24 +50,26 @@
       processImage();
     }
   }
+
+  function saveApiKey() {
+    if (typeof window !== 'undefined' && replicateApiKey.trim()) {
+      localStorage.setItem('replicate_api_key', replicateApiKey.trim());
+    }
+  }
 </script>
 
 <main>
   <header>
-    <h1>Image Inpainting Demo</h1>
-    <p>Enter a text prompt to edit the circular area of the image (Free using Stable Diffusion)</p>
+    <h1>FLUX.1-Kontext Image Editing</h1>
+    <p>Enter an instruction to modify the entire image</p>
+    <p style="font-size: 0.9em; color: rgba(255,255,255,0.8);">🚀 Real AI via Replicate API or Demo Mode</p>
   </header>
 
   <div class="image-container">
     <div class="image-panel">
       <h2>Original Image</h2>
       <div class="image-wrapper">
-        <div class="image-container-with-mask">
-          <img src={sampleImageUrl} alt="Sample image with edit area" class="sample-image" />
-          <div class="edit-mask">
-            <div class="edit-circle"></div>
-          </div>
-        </div>
+        <img src={sampleImageUrl} alt="Original image" class="sample-image" />
       </div>
     </div>
 
@@ -105,15 +97,14 @@
     <div class="api-key-input">
       <input
         type="password"
-        bind:value={apiKey}
+        bind:value={replicateApiKey}
         on:blur={saveApiKey}
-        placeholder="Enter your Hugging Face API key..."
+        placeholder="Enter Replicate API key (optional - for real AI)"
         class="api-input"
       />
       <p class="api-help">
-        Get your <strong>FREE</strong> API key from <a href="https://huggingface.co/settings/tokens" target="_blank"
-          >Hugging Face Settings</a
-        > (Sign up → Settings → Access Tokens)
+        Get your <strong>FREE</strong> API key from <a href="https://replicate.com" target="_blank">Replicate</a>
+        (Sign up → Account → API Tokens) or leave empty for demo mode
       </p>
     </div>
 
@@ -122,7 +113,7 @@
       <textarea
         bind:value={textPrompt}
         on:keydown={handleKeyDown}
-        placeholder="Enter your prompt to edit the circular area... (Press Enter to generate)"
+        placeholder="Enter editing instruction... (e.g., 'make it warmer', 'add rain', 'make it vintage')"
         rows="3"
       ></textarea>
 
@@ -135,7 +126,7 @@
       <div class="input-actions">
         <button
           on:click={processImage}
-          disabled={!textPrompt.trim() || !apiKey.trim() || isProcessing}
+          disabled={!textPrompt.trim() || isProcessing}
           class="generate-btn"
         >
           {isProcessing ? 'Generating...' : 'Generate'}
@@ -236,50 +227,11 @@
     overflow: hidden;
   }
 
-  .image-container-with-mask {
-    position: relative;
-    display: inline-block;
-  }
-
   .sample-image {
     max-width: 100%;
     max-height: 400px;
     object-fit: contain;
     border-radius: 8px;
-  }
-
-  .edit-mask {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-
-  .edit-circle {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 120px;
-    height: 120px;
-    transform: translate(-50%, -50%);
-    border: 3px dashed #ff6b6b;
-    border-radius: 50%;
-    background: rgba(255, 107, 107, 0.1);
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 0.6;
-      transform: translate(-50%, -50%) scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1.05);
-    }
   }
 
   .image-wrapper img {
@@ -365,6 +317,53 @@
 
   .api-help a:hover {
     text-decoration: underline;
+  }
+
+  .api-actions {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .test-api-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #007bff;
+    border-radius: 6px;
+    background: transparent;
+    color: #007bff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .test-api-btn:hover:not(:disabled) {
+    background: #007bff;
+    color: white;
+  }
+
+  .test-api-btn:disabled {
+    border-color: #ccc;
+    color: #ccc;
+    cursor: not-allowed;
+  }
+
+  .api-status {
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .api-status.success {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+    border: 1px solid rgba(40, 167, 69, 0.2);
+  }
+
+  .api-status.error {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    border: 1px solid rgba(220, 53, 69, 0.2);
   }
 
   .error-message {
