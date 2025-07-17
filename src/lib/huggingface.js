@@ -1,125 +1,126 @@
 // Replicate API integration for FLUX.1-Kontext-dev
-const REPLICATE_API_URL = 'https://api.replicate.com/v1/predictions';
+const FLUX_KONTEXT_MODEL = 'black-forest-labs/flux-kontext-dev';
 
-// Create circular mask for inpainting
-function createCircularMask(width, height) {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  
-  // Fill with black (areas to keep)
-  ctx.fillStyle = 'black';
-  ctx.fillRect(0, 0, width, height);
-  
-  // Draw white circle (area to inpaint)
-  ctx.fillStyle = 'white';
-  ctx.beginPath();
-  ctx.arc(width / 2, height / 2, Math.min(width, height) / 4, 0, Math.PI * 2);
-  ctx.fill();
-  
-  return canvas.toDataURL('image/png');
-}
 
-// Process image with instruction-based editing (Demo version)
-export async function processImageWithInpainting(imageBase64, prompt) {
-  try {
-    // For demo, directly use simulation
-    return await simulateImageEditing(imageBase64, prompt);
-  } catch (error) {
-    console.error('Error processing image with instruction editing:', error);
-    throw error;
-  }
-}
 
 // FLUX.1-Kontext-dev via Replicate API (Instruction-based editing)
-export async function processImageWithFluxBase64(imageBase64, prompt, replicateApiKey) {
+export async function processImageWithFluxBase64(imageBase64, prompt, replicateApiKey, logCallback) {
   try {
     // Try Replicate API first
     if (replicateApiKey && replicateApiKey.trim()) {
       try {
-        return await processWithReplicate(imageBase64, prompt, replicateApiKey);
+        logCallback?.('🔗 Using Replicate API with provided key', 'info');
+        return await processWithReplicate(imageBase64, prompt, replicateApiKey, logCallback);
       } catch (replicateError) {
-        console.log('Replicate API failed, falling back to demo:', replicateError);
+        logCallback?.(`❌ Replicate API failed: ${replicateError.message}`, 'error');
+        logCallback?.('🔄 Falling back to demo mode', 'info');
       }
     }
     
     // Fallback to demo simulation
-    console.log('Using demo simulation for instruction:', prompt);
-    return await simulateImageEditing(imageBase64, prompt);
+    logCallback?.('🎭 Using demo simulation mode', 'info');
+    return await simulateImageEditing(imageBase64, prompt, logCallback);
   } catch (error) {
-    console.error('Error processing image:', error);
+    logCallback?.(`❌ Processing failed: ${error.message}`, 'error');
     throw error;
   }
 }
 
 // Replicate API implementation for instruction-based editing
-async function processWithReplicate(imageBase64, prompt, apiKey) {
-  const response = await fetch(REPLICATE_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Token ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      version: "black-forest-labs/flux-1-kontext-dev",
-      input: {
-        image: `data:image/jpeg;base64,${imageBase64}`,
-        prompt: prompt,
-        guidance_scale: 2.5,
-        num_inference_steps: 25,
-        seed: 42
-      }
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Replicate API failed: ${response.status} - ${errorText}`);
-  }
-
-  const prediction = await response.json();
+async function processWithReplicate(imageBase64, prompt, apiKey, logCallback) {
+  // Convert base64 to data URL for Replicate
+  const imageDataUrl = `data:image/jpeg;base64,${imageBase64}`;
   
-  // Poll for completion
-  return await pollReplicateResult(prediction.id, apiKey);
+  logCallback?.('📡 Sending request via server proxy...', 'info');
+  logCallback?.(`📝 Model: ${FLUX_KONTEXT_MODEL}`, 'info');
+  logCallback?.(`💬 Prompt: "${prompt}"`, 'info');
+  
+  try {
+    const response = await fetch('/api/replicate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        input_image: imageDataUrl,
+        api_key: apiKey
+      })
+    });
+    
+    logCallback?.(`📊 Response status: ${response.status}`, 'info');
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      logCallback?.(`❌ API Request failed: ${response.status}`, 'error');
+      logCallback?.(`📄 Error details: ${errorData.error}`, 'error');
+      throw new Error(`Server proxy failed: ${response.status} - ${errorData.error}`);
+    }
+
+    const prediction = await response.json();
+    logCallback?.(`🆔 Prediction ID: ${prediction.id}`, 'info');
+    logCallback?.(`📊 Status: ${prediction.status}`, 'info');
+    
+    // Poll for completion
+    return await pollReplicateResult(prediction.id, apiKey, logCallback);
+  } catch (fetchError) {
+    logCallback?.(`❌ Fetch error: ${fetchError.message}`, 'error');
+    logCallback?.(`🔍 Error type: ${fetchError.name}`, 'error');
+    throw new Error(`Network error: ${fetchError.message}`);
+  }
 }
 
 // Poll Replicate for result
-async function pollReplicateResult(predictionId, apiKey) {
+async function pollReplicateResult(predictionId, apiKey, logCallback) {
   const maxAttempts = 30;
   let attempts = 0;
   
+  logCallback?.('🔄 Starting to poll for results...', 'info');
+  
   while (attempts < maxAttempts) {
-    const response = await fetch(`${REPLICATE_API_URL}/${predictionId}`, {
-      headers: {
-        'Authorization': `Token ${apiKey}`,
-      }
-    });
+    logCallback?.(`⏳ Polling attempt ${attempts + 1}/${maxAttempts}`, 'info');
+    
+    const response = await fetch(`/api/replicate/${predictionId}?api_key=${encodeURIComponent(apiKey)}`);
 
     if (!response.ok) {
+      const errorData = await response.json();
+      logCallback?.(`❌ Poll failed: ${response.status}`, 'error');
+      logCallback?.(`📄 Error: ${errorData.error}`, 'error');
       throw new Error(`Failed to check prediction status: ${response.status}`);
     }
 
     const prediction = await response.json();
+    logCallback?.(`📊 Status: ${prediction.status}`, 'info');
     
     if (prediction.status === 'succeeded') {
-      return prediction.output[0]; // Return the generated image URL
+      logCallback?.('🎉 Prediction succeeded!', 'success');
+      logCallback?.(`🖼️ Output: ${prediction.output}`, 'success');
+      return prediction.output;
     } else if (prediction.status === 'failed') {
+      logCallback?.(`❌ Prediction failed: ${prediction.error}`, 'error');
       throw new Error(`Prediction failed: ${prediction.error}`);
     }
     
     // Wait 2 seconds before next poll
+    logCallback?.('⏸️ Waiting 2 seconds before next poll...', 'info');
     await new Promise(resolve => setTimeout(resolve, 2000));
     attempts++;
   }
   
+  logCallback?.('⏰ Prediction timed out after 30 attempts', 'error');
   throw new Error('Prediction timed out');
 }
 
-// Demo simulation for instruction-based image editing
-async function simulateImageEditing(imageBase64, prompt) {
+// Simple demo simulation (no hard-coded cases)
+async function simulateImageEditing(imageBase64, prompt, logCallback) {
   return new Promise((resolve) => {
+    logCallback?.('🎭 Starting demo simulation...', 'info');
+    logCallback?.(`📝 Demo prompt: "${prompt}"`, 'info');
+    logCallback?.('⏳ Simulating processing delay...', 'info');
+    
     setTimeout(() => {
+      logCallback?.('🎨 Generating demo result...', 'info');
+      
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
@@ -131,19 +132,18 @@ async function simulateImageEditing(imageBase64, prompt) {
         // Draw original image
         ctx.drawImage(img, 0, 0);
         
-        // Apply visual effects based on instruction
-        applyEditingEffect(ctx, img.width, img.height, prompt);
-        
-        // Add demo watermark
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(10, 10, 300, 60);
+        // Add demo watermark (no hard-coded editing effects)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(10, 10, 380, 80);
         
         ctx.fillStyle = 'white';
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText(`✨ Demo Edit: "${prompt}"`, 20, 30);
-        ctx.fillText(`🚀 Real AI needs Replicate API key`, 20, 50);
+        ctx.fillText(`✨ Demo Mode`, 20, 30);
+        ctx.fillText(`📝 Instruction: "${prompt}"`, 20, 50);
+        ctx.fillText(`🚀 Add Replicate API key for real AI editing`, 20, 70);
         
+        logCallback?.('✅ Demo image generated', 'success');
         resolve(canvas.toDataURL());
       };
       img.src = `data:image/jpeg;base64,${imageBase64}`;
@@ -151,52 +151,6 @@ async function simulateImageEditing(imageBase64, prompt) {
   });
 }
 
-// Apply visual effects based on editing instruction
-function applyEditingEffect(ctx, width, height, prompt) {
-  const lowerPrompt = prompt.toLowerCase();
-  
-  // Color temperature changes
-  if (lowerPrompt.includes('warm') || lowerPrompt.includes('sunset') || lowerPrompt.includes('golden')) {
-    ctx.fillStyle = 'rgba(255, 200, 100, 0.2)';
-    ctx.fillRect(0, 0, width, height);
-  } else if (lowerPrompt.includes('cold') || lowerPrompt.includes('blue') || lowerPrompt.includes('winter')) {
-    ctx.fillStyle = 'rgba(100, 150, 255, 0.2)';
-    ctx.fillRect(0, 0, width, height);
-  }
-  
-  // Brightness changes
-  if (lowerPrompt.includes('darker') || lowerPrompt.includes('night')) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.fillRect(0, 0, width, height);
-  } else if (lowerPrompt.includes('brighter') || lowerPrompt.includes('sunny')) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.fillRect(0, 0, width, height);
-  }
-  
-  // Style changes
-  if (lowerPrompt.includes('vintage') || lowerPrompt.includes('sepia')) {
-    ctx.fillStyle = 'rgba(139, 69, 19, 0.2)';
-    ctx.fillRect(0, 0, width, height);
-  } else if (lowerPrompt.includes('cyberpunk') || lowerPrompt.includes('neon')) {
-    ctx.fillStyle = 'rgba(255, 0, 255, 0.15)';
-    ctx.fillRect(0, 0, width, height);
-  }
-  
-  // Add simple overlay patterns
-  if (lowerPrompt.includes('rain') || lowerPrompt.includes('storm')) {
-    // Draw rain lines
-    ctx.strokeStyle = 'rgba(200, 200, 255, 0.5)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 50; i++) {
-      const x = Math.random() * width;
-      const y = Math.random() * height;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 5, y + 20);
-      ctx.stroke();
-    }
-  }
-}
 
 
 // Test API key validity with a simple, reliable model
